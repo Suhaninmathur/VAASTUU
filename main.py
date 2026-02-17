@@ -1,7 +1,10 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import random
+import os
 
 app = Flask(__name__)
+CORS(app)  # ✅ Allow frontend requests
 
 # --- Vastu Rules Dataset ---
 vastu_rules = {
@@ -26,57 +29,57 @@ def detect_language(message):
 
 @app.route("/")
 def home():
-    return "🪔 AI Vastu Expert API is running!"
+    return "🪔 AI Vastu API Running Successfully!"
 
 @app.route("/chat", methods=["POST"])
 def chat():
-    data = request.json
-    message = data.get("message", "").strip()
-    
-    lang = detect_language(message)
-    response = ""
+    try:
+        data = request.get_json()
+        message = data.get("message", "").strip()
 
-    # Greeting
-    if "namaste" in message.lower() or "नमस्ते" in message:
-        if lang == "hi":
-            response = "🙏 नमस्ते! मैं आपका वास्तु सलाहकार हूँ।"
+        if not message:
+            return jsonify({"response": "Please send a message"}), 400
+
+        lang = detect_language(message)
+        tokens = message.lower().split()
+        room = None
+        direction = None
+
+        for r in vastu_rules.keys():
+            if r in tokens:
+                room = r
+
+        for d in ["north","south","east","west","southeast","southwest","northeast","northwest"]:
+            if d in tokens:
+                direction = d.capitalize()
+
+        if room and direction:
+            ideal = vastu_rules[room]["ideal"]
+
+            if direction in ideal:
+                if lang == "hi":
+                    response = f"✅ उत्तम! {room} {direction} दिशा में है।"
+                else:
+                    response = f"✅ Perfect! {room.capitalize()} in {direction} is ideal."
+            else:
+                if lang == "hi":
+                    remedy = random.choice(vastu_rules[room]["remedy_hi"])
+                    response = f"⚠️ {room} {direction} दिशा में उचित नहीं। उपाय: {remedy}"
+                else:
+                    remedy = random.choice(vastu_rules[room]["remedy_en"])
+                    response = f"⚠️ {room.capitalize()} in {direction} is not ideal. Remedy: {remedy}"
         else:
-            response = "🙏 Namaste! I am your Vastu consultant."
+            if lang == "hi":
+                response = "कृपया अपना कमरा और उसकी दिशा बताएं."
+            else:
+                response = "Please tell me your room and its direction."
+
         return jsonify({"response": response})
 
-    tokens = message.lower().split()
-    room = None
-    direction = None
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
-    for r in vastu_rules.keys():
-        if r in tokens:
-            room = r
-
-    for d in ["north","south","east","west","southeast","southwest","northeast","northwest"]:
-        if d in tokens:
-            direction = d.capitalize()
-
-    if room and direction:
-        ideal = vastu_rules[room]["ideal"]
-        if direction in ideal:
-            if lang == "hi":
-                response = f"✅ उत्तम! {room} {direction} दिशा में है।"
-            else:
-                response = f"✅ Perfect! {room.capitalize()} in {direction} is ideal."
-        else:
-            if lang == "hi":
-                remedy = random.choice(vastu_rules[room]["remedy_hi"])
-                response = f"⚠️ {room} {direction} दिशा में उचित नहीं। उपाय: {remedy}"
-            else:
-                remedy = random.choice(vastu_rules[room]["remedy_en"])
-                response = f"⚠️ {room.capitalize()} in {direction} is not ideal. Remedy: {remedy}"
-    else:
-        if lang == "hi":
-            response = "कृपया अपना कमरा और उसकी दिशा बताएं."
-        else:
-            response = "Please tell me your room and its direction."
-
-    return jsonify({"response": response})
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
